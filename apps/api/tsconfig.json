@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": ".", "outDir": "../../node_modules/.cache/ts/api", "types": ["node"] },
+  "include": ["src", "test", "drizzle.config.ts", "tsup.config.ts"],
+  "references": [{ "path": "../../packages/shared" }]
+}
