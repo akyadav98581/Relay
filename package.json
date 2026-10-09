@@ -1,0 +1,31 @@
+{
+  "name": "relay",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c gray,gray \"npm run dev -w @relay/api\" \"npm run dev -w @relay/web\"",
+    "build": "npm run build -w @relay/web && npm run build -w @relay/api",
+    "start": "node apps/api/dist/index.js",
+    "typecheck": "tsc -b packages/shared apps/api && tsc -p apps/web",
+    "test": "vitest run",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "concurrently": "^10.0.6",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "playwright": "^1.64.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

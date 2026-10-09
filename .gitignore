@@ -1,0 +1,10 @@
+node_modules
+dist
+.data
+*.log
+*.tsbuildinfo
+test-results
+shots
+GATES.md
+PLAN.md
+.env

@@ -1,0 +1,13 @@
+{
+  "name": "@relay/shared",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "cron-parser": "^5.10.1",
+    "jsonata": "^2.2.2",
+    "zod": "^4.6.5"
+  }
+}
