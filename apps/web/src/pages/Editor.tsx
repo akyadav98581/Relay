@@ -44,6 +44,13 @@ function Canvas({ webhookPath }: { webhookPath: string }) {
   const graph = useMemo(() => toGraph(s.nodes, s.edges), [s.nodes, s.edges])
   const problems = useMemo(() => findProblems(graph).problems, [graph])
   const selected = s.nodes.find((n) => n.selected)
+  const hasSelection = !!selected
+  // below xl the settings open under the canvas and squeeze it, so frame the steps again
+  useEffect(() => {
+    if (!window.matchMedia('(max-width: 1279px)').matches) return
+    const t = setTimeout(() => void flow.fitView({ padding: 0.2, maxZoom: 1, duration: 200 }), 60)
+    return () => clearTimeout(t)
+  }, [hasSelection, flow])
   const hasTrigger = s.nodes.some((n) => isTrigger(n.data.type))
   const triggerType = s.nodes.find((n) => isTrigger(n.data.type))?.data.type
 
@@ -129,14 +136,14 @@ function Canvas({ webhookPath }: { webhookPath: string }) {
     <div className="flex h-full flex-col">
       <header className="relative z-10 flex flex-wrap items-center gap-3 border-b border-white/[0.07] bg-[rgba(10,11,17,0.6)] px-4 py-2.5 backdrop-blur-xl">
         <Link to="/workflows" aria-label="Back to workflows" className="grid size-9 place-items-center rounded-lg text-mute transition hover:bg-white/[0.08] hover:text-ink"><ArrowLeft size={16} weight="bold" /></Link>
-        <input aria-label="Workflow name" className="display min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1 text-[1.6rem] outline-none transition hover:bg-white/[0.05] focus:bg-white/[0.07] sm:max-w-md" value={s.name} onChange={(e) => s.setName(e.target.value)} />
+        <input aria-label="Workflow name" className="display min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1 text-[1.35rem] outline-none sm:text-[1.6rem] transition hover:bg-white/[0.05] focus:bg-white/[0.07] sm:max-w-md" value={s.name} onChange={(e) => s.setName(e.target.value)} />
         <Pill status={s.enabled ? 'on' : 'idle'} label={s.enabled ? 'On' : 'Draft'} testId="state" />
         {dirty && <span className="text-xs text-mute" data-testid="dirty">Unsaved changes</span>}
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
           <button className="btn" onClick={() => setShowProblems((v) => !v)} aria-expanded={showProblems} disabled={problems.length === 0}>
-            <Warning size={14} weight="bold" className={problems.length ? 'text-yellow-ink' : ''} /> {problems.length === 0 ? 'No problems' : `${problems.length} problem${problems.length === 1 ? '' : 's'}`}
+            <Warning size={14} weight="bold" className={problems.length ? 'text-yellow-ink' : ''} /> <span className={problems.length === 0 ? 'hidden sm:inline' : ''}>{problems.length === 0 ? 'No problems' : `${problems.length} problem${problems.length === 1 ? '' : 's'}`}</span>
           </button>
-          <Link to={`/workflows/${id}/runs`} className="btn"><ClockCounterClockwise size={14} weight="bold" /> Runs</Link>
+          <Link to={`/workflows/${id}/runs`} className="btn" aria-label="Runs"><ClockCounterClockwise size={14} weight="bold" /> <span className="hidden sm:inline">Runs</span></Link>
           <button className="btn" onClick={startRun} disabled={busy !== null || problems.length > 0}><Play size={14} weight="bold" /> Run now</button>
           <button className="btn" onClick={toggle} disabled={busy !== null || (!s.enabled && problems.length > 0)} aria-pressed={s.enabled}>{s.enabled ? 'Turn off' : 'Turn on'}</button>
           <button className="btn btn-primary" onClick={() => void save()} disabled={busy !== null || !dirty}><FloppyDisk size={14} weight="bold" /> Save</button>
@@ -155,6 +162,18 @@ function Canvas({ webhookPath }: { webhookPath: string }) {
       {showProblems && problems.length > 0 && (
         <ul className="list-disc space-y-0.5 border-b border-line bg-yellow-wash py-2 pl-9 pr-4 text-xs text-yellow-ink" data-testid="problems">{problems.map((p) => <li key={p}>{p}</li>)}</ul>
       )}
+
+      <div className="flex gap-2 overflow-x-auto border-b border-white/[0.07] bg-black/25 px-4 py-2 md:hidden" aria-label="Add a step">
+        {NODE_TYPES.map((t) => {
+          const Icon = ICONS[t]
+          const off = isTrigger(t) && hasTrigger
+          return (
+            <button key={t} disabled={off} onClick={() => s.addNode(t)} data-t={t} className="flex shrink-0 items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] py-1.5 pl-1.5 pr-3.5 text-sm disabled:opacity-40">
+              <span className="step-icon" style={{ width: 24, height: 24, borderRadius: 999 }}><Icon size={13} weight="bold" /></span> {NODE_INFO[t].label}
+            </button>
+          )
+        })}
+      </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] md:grid-cols-[190px_minmax(0,1fr)] xl:grid-cols-[190px_minmax(0,1fr)_340px]">
         <aside className="hidden border-r border-white/[0.07] bg-black/25 p-3 md:block" aria-label="Steps you can add">
@@ -212,7 +231,7 @@ function Canvas({ webhookPath }: { webhookPath: string }) {
       </div>
 
       {selected && (
-        <div className="max-h-[45vh] overflow-y-auto border-t border-white/[0.07] bg-black/40 xl:hidden" aria-label="Step settings">
+        <div className="max-h-[38vh] overflow-y-auto border-t border-white/[0.07] bg-black/40 xl:hidden" aria-label="Step settings">
           <ConfigPanel node={selected} webhookPath={webhookPath} />
         </div>
       )}

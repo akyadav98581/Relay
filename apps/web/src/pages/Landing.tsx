@@ -1,8 +1,7 @@
-import { useRef } from 'react'
-import type { CSSProperties, PointerEvent } from 'react'
+import type { CSSProperties } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowRight } from '@phosphor-icons/react'
+import { ArrowRight, GithubLogo, Play } from '@phosphor-icons/react'
 import { api } from '../api'
 import { DelayViz, NetViz, QueueViz, RetryViz, RunViz, SandboxViz } from '../components/FeatureViz'
 import FlowDemo from '../components/FlowDemo'
@@ -26,30 +25,12 @@ const STEPS: [string, string, string, string][] = [
   ['3', 'Read the run', 'Each run keeps its steps, requests, answers, retries and errors.', 'notify  HTTP 200  142 ms'],
 ]
 
-function Words({ text, start = 1 }: { text: string; start?: number }) {
-  return (
-    <>
-      {text.split(' ').map((w, i) => (
-        <span key={i}>
-          <span className="inline-block overflow-hidden align-bottom"><span className="rise inline-block" style={{ '--i': start + i } as CSSProperties}>{w}</span></span>{' '}
-        </span>
-      ))}
-    </>
-  )
-}
-
 export default function Landing() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false })
   const signedIn = !!me.data
   const scrolled = useScrolled()
-  const hero = useRef<HTMLElement>(null)
   const [stepsRef, stepsSeen] = useInView<HTMLOListElement>()
 
-  const light = (e: PointerEvent<HTMLElement>) => {
-    const r = e.currentTarget.getBoundingClientRect()
-    e.currentTarget.style.setProperty('--hx', `${e.clientX - r.left}px`)
-    e.currentTarget.style.setProperty('--hy', `${e.clientY - r.top}px`)
-  }
 
   return (
     <div className="min-h-full overflow-x-clip">
@@ -74,30 +55,33 @@ export default function Landing() {
       </header>
 
       <main>
-        <section ref={hero} onPointerMove={light} className="relative">
-          <div className="pointer-events-none absolute inset-0 hidden lg:block" style={{ background: 'radial-gradient(520px circle at var(--hx, 30%) var(--hy, 30%), rgba(205,245,69,0.07), transparent 60%)' }} />
-          <div className="relative mx-auto grid max-w-7xl items-center gap-14 px-5 pb-24 pt-12 sm:px-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:gap-12 lg:pb-32 lg:pt-20">
-            <div>
-              <p className="rise mono flex items-center gap-2.5 text-xs uppercase tracking-[0.16em] text-mute" style={{ '--i': 0 } as CSSProperties}>
-                <span className="size-1.5 rounded-full bg-[var(--accent)] shadow-[0_0_10px_var(--accent)]" /> Workflow builder
-              </p>
-              <h1 className="display mt-6 text-[3.1rem] sm:text-[4.6rem] xl:text-[5.2rem]">
-                <span className="block"><Words text="Automations" /></span>
-                <span className="block"><Words text="you can" start={2} /></span>
-                <span className="rise serif-i block text-[1.1em]" style={{ '--i': 5 } as CSSProperties}>watch run.</span>
-              </h1>
-              <p className="rise mt-7 max-w-lg text-[1.08rem] leading-[1.7] text-mute" style={{ '--i': 6 } as CSSProperties}>
-                Draw a few steps, point a webhook or a schedule at them, and read what every step sent and what came back. Queue, retries and waits live in Postgres.
-              </p>
-              <div className="rise mt-10 flex flex-wrap items-center gap-3" style={{ '--i': 7 } as CSSProperties}>
-                <Link to={signedIn ? '/workflows' : '/login?mode=register'} className="btn btn-primary btn-lg" data-testid="cta">
-                  {signedIn ? 'Open your workflows' : 'Start building'} <ArrowRight size={16} weight="bold" className="nudge" />
-                </Link>
-                <a href="#how" className="btn btn-lg">See how it works</a>
-              </div>
-            </div>
-            <div className="rise lg:-mr-10 xl:-mr-24" style={{ '--i': 5 } as CSSProperties}><FlowDemo /></div>
+        <section className="relative flex min-h-[calc(100svh-73px)] flex-col overflow-hidden">
+          <div className="relative order-2 mt-12 px-5 sm:px-8 lg:absolute lg:inset-y-0 lg:right-0 lg:order-none lg:mt-0 lg:flex lg:w-[60%] lg:items-center lg:px-0 lg:pr-8">
+            <div className="rise w-full" style={{ '--i': 5 } as CSSProperties}><FlowDemo /></div>
           </div>
+          <div className="pointer-events-none absolute inset-0 hidden bg-gradient-to-r from-bone via-bone/85 to-transparent lg:block" style={{ right: '38%' }} />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-bone to-transparent" />
+
+          <div className="relative z-10 px-5 pt-14 sm:px-8 lg:pl-16 lg:pt-[14vh]">
+            <h1 className="rise text-[clamp(2.6rem,5.2vw,4.6rem)]" style={{ '--i': 1, fontFamily: 'var(--font-display)', fontWeight: 500, lineHeight: 1.06, letterSpacing: '-0.03em' } as CSSProperties}>
+              Automations<br />you can<br />watch run.
+            </h1>
+            <p className="rise mt-5 max-w-sm text-[15px] leading-relaxed text-mute" style={{ '--i': 3 } as CSSProperties}>
+              Draw a few steps, point a webhook or a schedule at them, and read what every step sent and what came back.
+            </p>
+            <div className="rise mt-8 flex items-center gap-3.5" style={{ '--i': 4 } as CSSProperties}>
+              <Link to={signedIn ? '/workflows' : '/login?mode=register'} className="btn btn-primary btn-lg !rounded-full" data-testid="cta">
+                {signedIn ? 'Open your workflows' : 'Start building'} <ArrowRight size={16} weight="bold" className="nudge" />
+              </Link>
+              <a href="#how" aria-label="See how it works" className="grid size-11 place-items-center rounded-full border border-white/25 bg-white/10 backdrop-blur transition hover:scale-110 active:scale-95">
+                <Play size={14} weight="fill" />
+              </a>
+            </div>
+          </div>
+
+          <a href="https://github.com/amitkhairwal/Relay" aria-label="Relay on GitHub" className="absolute bottom-8 left-5 z-10 hidden size-9 lg:grid place-items-center rounded-full border border-white/20 text-soft transition hover:text-ink lg:left-16">
+            <GithubLogo size={16} weight="fill" />
+          </a>
         </section>
 
         <div className="border-y border-white/[0.07] bg-white/[0.015] py-4" aria-hidden="true">
