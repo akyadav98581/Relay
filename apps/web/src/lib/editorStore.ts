@@ -1,5 +1,6 @@
 import { applyEdgeChanges, applyNodeChanges, type Connection, type Edge, type EdgeChange, type Node, type NodeChange, type XYPosition } from '@xyflow/react'
-import { create } from 'zustand'
+import { configureStore, createSlice, type PayloadAction } from '@reduxjs/toolkit'
+import { useDispatch, useSelector, type TypedUseSelectorHook } from 'react-redux'
 import { defaultConfig, isTrigger, type Graph, type NodeType } from '@relay/shared'
 import type { WorkflowDetail } from '../api'
 
@@ -36,82 +37,90 @@ export function reaches(edges: Edge[], from: string, to: string): boolean {
   return false
 }
 
-type State = {
+export type EditorState = {
   workflowId: string | null
   name: string
   enabled: boolean
   nodes: FlowNode[]
   edges: Edge[]
   baseline: string
-  load: (wf: WorkflowDetail) => void
-  setName: (n: string) => void
-  setEnabled: (v: boolean) => void
-  onNodesChange: (c: NodeChange<FlowNode>[]) => void
-  onEdgesChange: (c: EdgeChange[]) => void
-  canConnect: (c: { source: string; target: string }) => boolean
-  connect: (c: Connection) => void
-  addNode: (type: NodeType, at?: XYPosition) => string
-  setKey: (id: string, key: string) => void
-  setConfig: (id: string, patch: Record<string, unknown>) => void
-  markSaved: (wf: WorkflowDetail) => void
 }
+
+const initialState: EditorState = { workflowId: null, name: '', enabled: false, nodes: [], edges: [], baseline: '' }
 
 const snapshot = (name: string, nodes: FlowNode[], edges: Edge[]) => JSON.stringify([name, toGraph(nodes, edges)])
 
-export const useEditor = create<State>((set, get) => ({
-  workflowId: null,
-  name: '',
-  enabled: false,
-  nodes: [],
-  edges: [],
-  baseline: '',
+// Would adding source -> target be allowed? Plain function over the state, so the canvas can call it while dragging.
+export function canConnect(s: EditorState, { source, target }: { source: string; target: string }): boolean {
+  if (source === target) return false
+  const t = s.nodes.find((n) => n.id === target)
+  if (!t || isTrigger(t.data.type)) return false // a trigger has no input
+  if (s.edges.some((e) => e.source === source && e.target === target)) return false
+  return !reaches(s.edges, target, source) // would close a loop
+}
 
-  load(wf) {
-    const { nodes, edges } = toFlow(wf.graph)
-    set({ workflowId: wf.id, name: wf.name, enabled: wf.enabled, nodes, edges, baseline: snapshot(wf.name, nodes, edges) })
+const slice = createSlice({
+  name: 'editor',
+  initialState,
+  reducers: {
+    load(_state, a: PayloadAction<WorkflowDetail>) {
+      const wf = a.payload
+      const { nodes, edges } = toFlow(wf.graph)
+      return { workflowId: wf.id, name: wf.name, enabled: wf.enabled, nodes, edges, baseline: snapshot(wf.name, nodes, edges) }
+    },
+    markSaved(state, a: PayloadAction<WorkflowDetail>) {
+      state.name = a.payload.name
+      state.enabled = a.payload.enabled
+      state.baseline = snapshot(state.name, state.nodes, state.edges)
+    },
+    setName(state, a: PayloadAction<string>) {
+      state.name = a.payload
+    },
+    onNodesChange(state, a: PayloadAction<NodeChange<FlowNode>[]>) {
+      state.nodes = applyNodeChanges(a.payload, state.nodes)
+    },
+    onEdgesChange(state, a: PayloadAction<EdgeChange[]>) {
+      state.edges = applyEdgeChanges(a.payload, state.edges)
+    },
+    connect(state, a: PayloadAction<Connection>) {
+      const { source, target } = a.payload
+      if (!source || !target || !canConnect(state, { source, target })) return
+      state.edges.push({ id: `e_${source}_${target}`, source, target })
+    },
+    addNode: {
+      // The random id is made in prepare, because a reducer has to give the same answer every time.
+      prepare: (type: NodeType, at?: XYPosition) => ({ payload: { type, at, id: `n_${rid()}` } }),
+      reducer(state, a: PayloadAction<{ type: NodeType; at?: XYPosition; id: string }>) {
+        const { type, at, id } = a.payload
+        const { nodes } = state
+        let n = 1
+        while (nodes.some((x) => x.data.key === `${type}${n}`)) n++
+        const key = type === 'webhook' && !nodes.some((x) => x.data.key === 'start') ? 'start' : `${type}${n}`
+        // Next to the selected step (or the right-most one), so a chain builds left to right and edges stay readable.
+        const anchor = nodes.find((x) => x.selected) ?? nodes.reduce<FlowNode | undefined>((best, x) => (!best || x.position.x > best.position.x ? x : best), undefined)
+        const position = at ?? (anchor ? { x: anchor.position.x + 300, y: anchor.position.y } : { x: 80, y: 120 })
+        for (const x of nodes) x.selected = false
+        nodes.push({ id, type: 'step', position, selected: true, data: { key, type, config: defaultConfig(type) } })
+      },
+    },
+    setKey(state, a: PayloadAction<{ id: string; key: string }>) {
+      const n = state.nodes.find((x) => x.id === a.payload.id)
+      if (n) n.data.key = a.payload.key
+    },
+    setConfig(state, a: PayloadAction<{ id: string; patch: Record<string, unknown> }>) {
+      const n = state.nodes.find((x) => x.id === a.payload.id)
+      if (n) Object.assign(n.data.config, a.payload.patch)
+    },
   },
-  markSaved(wf) {
-    const { nodes, edges } = get()
-    set({ name: wf.name, enabled: wf.enabled, baseline: snapshot(wf.name, nodes, edges) })
-  },
-  setName: (name) => set({ name }),
-  setEnabled: (enabled) => set({ enabled }),
-  onNodesChange: (changes) => set({ nodes: applyNodeChanges(changes, get().nodes) }),
-  onEdgesChange: (changes) => set({ edges: applyEdgeChanges(changes, get().edges) }),
+})
 
-  canConnect({ source, target }) {
-    const { nodes, edges } = get()
-    if (source === target) return false
-    const t = nodes.find((n) => n.id === target)
-    if (!t || isTrigger(t.data.type)) return false // a trigger has no input
-    if (edges.some((e) => e.source === source && e.target === target)) return false
-    return !reaches(edges, target, source) // would close a loop
-  },
-  connect(c) {
-    if (!c.source || !c.target || !get().canConnect({ source: c.source, target: c.target })) return
-    set({ edges: [...get().edges, { id: `e_${c.source}_${c.target}`, source: c.source, target: c.target }] })
-  },
+export const { load, markSaved, setName, onNodesChange, onEdgesChange, connect, addNode, setKey, setConfig } = slice.actions
 
-  addNode(type, at) {
-    const { nodes } = get()
-    let n = 1
-    while (nodes.some((x) => x.data.key === `${type}${n}`)) n++
-    const key = type === 'webhook' && !nodes.some((x) => x.data.key === 'start') ? 'start' : `${type}${n}`
-    const id = `n_${rid()}`
-    // Next to the selected step (or the right-most one), so a chain builds left to right and edges stay readable.
-    const anchor = nodes.find((x) => x.selected) ?? nodes.reduce<FlowNode | undefined>((best, x) => (!best || x.position.x > best.position.x ? x : best), undefined)
-    const position = at ?? (anchor ? { x: anchor.position.x + 300, y: anchor.position.y } : { x: 80, y: 120 })
-    set({
-      nodes: [
-        ...nodes.map((x) => ({ ...x, selected: false })),
-        { id, type: 'step', position, selected: true, data: { key, type, config: defaultConfig(type) } },
-      ],
-    })
-    return id
-  },
-  setKey: (id, key) => set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, key } } : n)) }),
-  setConfig: (id, patch) =>
-    set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, config: { ...n.data.config, ...patch } } } : n)) }),
-}))
+export const store = configureStore({ reducer: { editor: slice.reducer } })
+export type RootState = ReturnType<typeof store.getState>
+export type AppDispatch = typeof store.dispatch
 
-export const isDirty = (s: State) => s.workflowId !== null && snapshot(s.name, s.nodes, s.edges) !== s.baseline
+export const useAppDispatch = () => useDispatch<AppDispatch>()
+export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector
+
+export const isDirty = (s: RootState) => s.editor.workflowId !== null && snapshot(s.editor.name, s.editor.nodes, s.editor.edges) !== s.editor.baseline

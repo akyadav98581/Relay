@@ -8,7 +8,7 @@ import { api, ApiError } from '../api'
 import ConfigPanel from '../components/ConfigPanel'
 import Pill from '../components/Pill'
 import StepNode from '../components/StepNode'
-import { isDirty, toGraph, useEditor } from '../lib/editorStore'
+import { addNode, canConnect, connect, isDirty, load, markSaved, onEdgesChange, onNodesChange, setName, store, toGraph, useAppDispatch, useAppSelector } from '../lib/editorStore'
 import { ICONS } from '../lib/nodeMeta'
 
 const nodeTypes = { step: StepNode }
@@ -17,10 +17,10 @@ const SAMPLE = JSON.stringify({ method: 'POST', body: { hello: 'world' }, query:
 export default function Editor() {
   const { id = '' } = useParams()
   const wf = useQuery({ queryKey: ['workflow', id], queryFn: () => api.workflow(id), refetchOnWindowFocus: false, staleTime: Infinity })
-  const load = useEditor((s) => s.load)
-  const loaded = useEditor((s) => s.workflowId)
+  const dispatch = useAppDispatch()
+  const loaded = useAppSelector((s) => s.editor.workflowId)
 
-  useEffect(() => { if (wf.data) load(wf.data) }, [wf.data?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (wf.data) dispatch(load(wf.data)) }, [wf.data?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (wf.isError) return <div className="grid h-full place-items-center text-sm text-mute">That workflow does not exist. <Link className="ml-1 underline" to="/workflows">Back to workflows</Link></div>
   if (!wf.data || loaded !== id) return <div className="grid h-full place-items-center text-sm text-mute">Loading</div>
@@ -32,8 +32,9 @@ function Canvas({ webhookPath }: { webhookPath: string }) {
   const nav = useNavigate()
   const qc = useQueryClient()
   const flow = useReactFlow()
-  const s = useEditor()
-  const dirty = useEditor(isDirty)
+  const dispatch = useAppDispatch()
+  const s = useAppSelector((r) => r.editor)
+  const dirty = useAppSelector(isDirty)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string; list?: string[] } | null>(null)
   const [showProblems, setShowProblems] = useState(false)
@@ -61,11 +62,11 @@ function Canvas({ webhookPath }: { webhookPath: string }) {
   )
 
   const save = useCallback(async (): Promise<boolean> => {
-    const st = useEditor.getState()
+    const st = store.getState().editor
     setBusy('save')
     try {
       const saved = await api.saveWorkflow(id, { name: st.name.trim() || 'Untitled workflow', graph: toGraph(st.nodes, st.edges), enabled: st.enabled })
-      st.markSaved(saved)
+      dispatch(markSaved(saved))
       qc.setQueryData(['workflow', id], saved)
       qc.invalidateQueries({ queryKey: ['workflows'] })
       setMessage({ kind: 'ok', text: saved.problems.length ? 'Saved as a draft. Fix the problems before turning it on.' : 'Saved.' })
@@ -80,7 +81,7 @@ function Canvas({ webhookPath }: { webhookPath: string }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void save() } }
-    const onLeave = (e: BeforeUnloadEvent) => { if (isDirty(useEditor.getState())) e.preventDefault() }
+    const onLeave = (e: BeforeUnloadEvent) => { if (isDirty(store.getState())) e.preventDefault() }
     window.addEventListener('keydown', onKey)
     window.addEventListener('beforeunload', onLeave)
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('beforeunload', onLeave) }
@@ -92,7 +93,7 @@ function Canvas({ webhookPath }: { webhookPath: string }) {
     try {
       if (dirty && !(await save())) return
       const saved = await api.saveWorkflow(id, { enabled: next })
-      s.markSaved(saved)
+      dispatch(markSaved(saved))
       qc.setQueryData(['workflow', id], saved)
       qc.invalidateQueries({ queryKey: ['workflows'] })
       setMessage({ kind: 'ok', text: next ? 'Turned on.' : 'Turned off.' })
@@ -129,14 +130,14 @@ function Canvas({ webhookPath }: { webhookPath: string }) {
     e.preventDefault()
     const type = e.dataTransfer.getData('application/relay-node') as NodeType
     if (!NODE_TYPES.includes(type) || (isTrigger(type) && hasTrigger)) return
-    s.addNode(type, flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }))
+    dispatch(addNode(type, flow.screenToFlowPosition({ x: e.clientX, y: e.clientY })))
   }
 
   return (
     <div className="flex h-full flex-col">
       <header className="relative z-10 flex flex-wrap items-center gap-3 border-b border-white/[0.07] bg-[rgba(10,11,17,0.6)] px-4 py-2.5 backdrop-blur-xl">
         <Link to="/workflows" aria-label="Back to workflows" className="grid size-9 place-items-center rounded-lg text-mute transition hover:bg-white/[0.08] hover:text-ink"><ArrowLeft size={16} weight="bold" /></Link>
-        <input aria-label="Workflow name" className="display min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1 text-[1.35rem] outline-none sm:text-[1.6rem] transition hover:bg-white/[0.05] focus:bg-white/[0.07] sm:max-w-md" value={s.name} onChange={(e) => s.setName(e.target.value)} />
+        <input aria-label="Workflow name" className="display min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1 text-[1.35rem] outline-none sm:text-[1.6rem] transition hover:bg-white/[0.05] focus:bg-white/[0.07] sm:max-w-md" value={s.name} onChange={(e) => dispatch(setName(e.target.value))} />
         <Pill status={s.enabled ? 'on' : 'idle'} label={s.enabled ? 'On' : 'Draft'} testId="state" />
         {dirty && <span className="text-xs text-mute" data-testid="dirty">Unsaved changes</span>}
         <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
@@ -168,7 +169,7 @@ function Canvas({ webhookPath }: { webhookPath: string }) {
           const Icon = ICONS[t]
           const off = isTrigger(t) && hasTrigger
           return (
-            <button key={t} disabled={off} onClick={() => s.addNode(t)} data-t={t} className="flex shrink-0 items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] py-1.5 pl-1.5 pr-3.5 text-sm disabled:opacity-40">
+            <button key={t} disabled={off} onClick={() => dispatch(addNode(t))} data-t={t} className="flex shrink-0 items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] py-1.5 pl-1.5 pr-3.5 text-sm disabled:opacity-40">
               <span className="step-icon" style={{ width: 24, height: 24, borderRadius: 999 }}><Icon size={13} weight="bold" /></span> {NODE_INFO[t].label}
             </button>
           )
@@ -189,7 +190,7 @@ function Canvas({ webhookPath }: { webhookPath: string }) {
                   disabled={off}
                   draggable={!off}
                   onDragStart={(e) => e.dataTransfer.setData('application/relay-node', t)}
-                  onClick={() => s.addNode(t)}
+                  onClick={() => dispatch(addNode(t))}
                   title={off ? 'A workflow has one trigger' : NODE_INFO[t].blurb}
                   data-t={t}
                   className="flex w-full items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-2.5 py-2 text-left text-sm transition hover:border-[color-mix(in_srgb,var(--c)_45%,transparent)] hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-40"
@@ -207,10 +208,10 @@ function Canvas({ webhookPath }: { webhookPath: string }) {
             nodes={shown}
             edges={s.edges}
             nodeTypes={nodeTypes}
-            onNodesChange={s.onNodesChange}
-            onEdgesChange={s.onEdgesChange}
-            onConnect={s.connect}
-            isValidConnection={(c) => s.canConnect({ source: c.source, target: c.target })}
+            onNodesChange={(c) => dispatch(onNodesChange(c))}
+            onEdgesChange={(c) => dispatch(onEdgesChange(c))}
+            onConnect={(c) => dispatch(connect(c))}
+            isValidConnection={(c) => canConnect(s, { source: c.source, target: c.target })}
             deleteKeyCode={['Backspace', 'Delete']}
             fitView
             fitViewOptions={{ padding: 0.4, maxZoom: 1 }}

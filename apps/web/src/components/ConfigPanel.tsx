@@ -4,7 +4,7 @@ import type { Edge } from '@xyflow/react'
 import { KEY_PATTERN, MAX_DELAY_SECONDS, NODE_INFO, nextRun } from '@relay/shared'
 import { ICONS } from '../lib/nodeMeta'
 import { humanSeconds } from '../lib/format'
-import { useEditor, type FlowNode } from '../lib/editorStore'
+import { setConfig, setKey, useAppDispatch, useAppSelector, type FlowNode } from '../lib/editorStore'
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -69,10 +69,11 @@ function ancestors(nodes: FlowNode[], edges: Edge[], id: string): string[] {
 }
 
 export default function ConfigPanel({ node, webhookPath }: { node: FlowNode; webhookPath: string }) {
-  const { nodes, edges, setConfig, setKey } = useEditor()
+  const dispatch = useAppDispatch()
+  const { nodes, edges } = useAppSelector((s) => s.editor)
   const { type, key, config } = node.data
   const Icon = ICONS[type]
-  const set = (patch: Record<string, unknown>) => setConfig(node.id, patch)
+  const set = (patch: Record<string, unknown>) => dispatch(setConfig({ id: node.id, patch }))
   const before = useMemo(() => ancestors(nodes, edges, node.id), [nodes, edges, node.id])
   const keyError = !KEY_PATTERN.test(key) ? 'Lowercase letters, digits and underscores, starting with a letter.' : nodes.some((n) => n.id !== node.id && n.data.key === key) ? 'Another step already uses this name.' : null
 
@@ -87,7 +88,7 @@ export default function ConfigPanel({ node, webhookPath }: { node: FlowNode; web
       </div>
 
       <Field label="Name" hint={keyError ?? 'Later steps read this step as steps.' + key}>
-        <input className={`field mono ${keyError ? 'border-red-ink' : ''}`} value={key} onChange={(e) => setKey(node.id, e.target.value)} spellCheck={false} />
+        <input className={`field mono ${keyError ? 'border-red-ink' : ''}`} value={key} onChange={(e) => dispatch(setKey({ id: node.id, key: e.target.value }))} spellCheck={false} />
       </Field>
 
       {type === 'webhook' && (
