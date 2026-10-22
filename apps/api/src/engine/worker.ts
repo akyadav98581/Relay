@@ -5,8 +5,7 @@ import { claimJob } from './queue.js'
 import { processJob, type RunnerDeps } from './runner.js'
 import type { Evaluator } from '@relay/shared'
 import type { SafeFetchOpts } from '../http-guard.js'
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+import { sleepUntilWoken, wakeAll } from './wake.js'
 
 // n loops in this process, each claiming one job at a time.
 export function startWorkers(opts: { db: Db; config: Config; evaluate: Evaluator; count: number; fetchOpts?: SafeFetchOpts }) {
@@ -16,14 +15,14 @@ export function startWorkers(opts: { db: Db; config: Config; evaluate: Evaluator
     while (!stopped) {
       try {
         const job = await claimJob(opts.db, deps.workerId, opts.config.lockMs)
-        if (!job) { await sleep(opts.config.pollMs); continue }
+        if (!job) { await sleepUntilWoken(opts.config.pollMs); continue }
         await processJob(deps, job)
       } catch (err) {
         // The job stays locked and comes back when the lock expires.
         console.error('worker error:', (err as Error).message)
-        await sleep(opts.config.pollMs * 4)
+        await sleepUntilWoken(opts.config.pollMs * 4)
       }
     }
   })
-  return { async stop() { stopped = true; await Promise.all(loops) } }
+  return { async stop() { stopped = true; wakeAll(); await Promise.all(loops) } }
 }

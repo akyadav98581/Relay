@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import type { Db, Exec } from '../db/index.js'
+import { notifyJobs } from './wake.js'
 
 export type ClaimedJob = { id: number; runId: string; nodeId: string }
 
@@ -27,4 +28,5 @@ export async function claimJob(db: Db, workerId: string, lockMs: number): Promis
 
 export async function enqueue(exec: Exec, runId: string, nodeId: string, runAt?: Date) {
   await exec.execute(sql`insert into jobs (run_id, node_id, run_at) values (${runId}, ${nodeId}, ${runAt ?? new Date()})`)
+  notifyJobs()
 }

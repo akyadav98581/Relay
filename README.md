@@ -17,9 +17,13 @@ npm run dev
 
 Open http://localhost:5173 and make an account. With no `DATABASE_URL` set, the server starts its own Postgres in `.data/pg`, so there is nothing else to install. Try the "Order alert" template: turn it on, then copy the curl command from the webhook step.
 
+With Docker, `docker compose up --build` starts the app, Postgres and Redis, and serves everything on http://localhost:3001.
+
 ## How it works
 
 **The queue is Postgres.** Each step that is ready to run is one row in a `jobs` table. Workers claim a row with `SELECT ... FOR UPDATE SKIP LOCKED`, so two workers never take the same one and never wait on each other. The tests run eight workers across two engines and check that no step is ever run twice.
+
+**Redis wakes the workers.** An idle worker used to poll the table every 250 ms, which on a free database adds up to gigabytes of traffic a month. Now `enqueue` publishes on a Redis channel and idle workers sleep until it fires. They still poll every 2 seconds (`POLL_MS`), because a delayed or retried job becomes due without anyone publishing anything. Redis is optional: without `REDIS_URL` the same wake-up happens inside the process, and with it a second instance would be woken too. If Redis is down, workers fall back to the 2 second poll. Redis only carries the nudge. The jobs stay in Postgres.
 
 **A delay does not sleep.** The first time a worker sees a delay step it puts the job back with a `run_at` in the future and moves on. A restart in the middle of a three-day wait loses nothing, and a hundred waiting runs cost no workers.
 
@@ -44,6 +48,7 @@ Run one instance. The scheduler is safe to run twice, but that has only been tes
 1. Create a free Postgres database on Neon (or any host) and copy the connection string.
 2. In Render, create a Blueprint from this repo. It reads `render.yaml`.
 3. Set `DATABASE_URL` to the connection string. `JWT_SECRET` is generated for you.
+4. Optional: add a Render Key Value instance and put its internal URL in `REDIS_URL`.
 
 The server runs migrations on start, and saves nothing in memory that matters, so a deploy is safe. The free web service sleeps when idle, and schedules do not fire while it sleeps, so point an uptime monitor at `/healthz`.
 

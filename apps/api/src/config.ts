@@ -1,6 +1,7 @@
 export type Config = {
   port: number
   databaseUrl: string
+  redisUrl: string
   jwtSecret: string
   publicUrl: string
   allowPrivateHttp: boolean
@@ -22,12 +23,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     port: Number(env.PORT) || 3001,
     databaseUrl: env.DATABASE_URL ?? '',
+    redisUrl: env.REDIS_URL ?? '',
     jwtSecret: env.JWT_SECRET ?? 'dev-only-secret-change-me',
     publicUrl: (env.PUBLIC_URL ?? '').replace(/\/$/, ''),
     allowPrivateHttp: env.ALLOW_PRIVATE_HTTP === '1',
     workerConcurrency: Number(env.WORKER_CONCURRENCY) || 4,
     lockMs: Number(env.LOCK_MS) || 60_000,
-    pollMs: Number(env.POLL_MS) || 250,
+    pollMs: Number(env.POLL_MS) || 2000,
     retryBaseMs: Number(env.RETRY_BASE_MS) || 1000,
     schedulerMs: Number(env.SCHEDULER_MS) || 5000,
     minScheduleMinutes: Number(env.MIN_SCHEDULE_MINUTES) || 1,

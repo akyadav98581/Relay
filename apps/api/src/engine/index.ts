@@ -7,6 +7,7 @@ import { startWorkers } from './worker.js'
 
 export * from './runs.js'
 export * from './queue.js'
+export { startWake, stopWake } from './wake.js'
 export * from './scheduler.js'
 export { processJob } from './runner.js'
 

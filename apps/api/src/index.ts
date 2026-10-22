@@ -1,7 +1,7 @@
 import { loadConfig } from './config.js'
 import { connect, migrateDb } from './db/index.js'
 import { createApp } from './app.js'
-import { createEngine } from './engine/index.js'
+import { createEngine, startWake, stopWake } from './engine/index.js'
 
 const config = loadConfig()
 let stopDevDb: (() => Promise<void>) | undefined
@@ -15,6 +15,7 @@ if (!url) {
 const { pool, db } = connect(url)
 await migrateDb(db)
 
+if (config.redisUrl) await startWake(config.redisUrl)
 const engine = createEngine(db, config)
 engine.startWorkers()
 engine.startScheduler()
@@ -26,6 +27,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, async () => {
     server.close()
     await engine.stop()
+    await stopWake()
     await pool.end()
     await stopDevDb?.()
     process.exit(0)
